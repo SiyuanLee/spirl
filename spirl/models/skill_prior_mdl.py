@@ -144,6 +144,8 @@ class SkillPriorMdl(BaseModel, ProbabilisticModel):
         losses.rec_mse = NLL(self._hp.reconstruction_mse_weight) \
             (Gaussian(model_output.reconstruction, torch.zeros_like(model_output.reconstruction)),
              self._regression_targets(inputs))
+        # print("rec_loss value", losses.rec_mse['value'])
+        # print("rec_loss weight", losses.rec_mse['weight'])
 
         # KL loss
         losses.kl_loss = KLDivLoss(self.beta)(model_output.q, model_output.p)
@@ -285,7 +287,7 @@ class SkillPriorMdl(BaseModel, ProbabilisticModel):
 
     def _compute_learned_prior_loss(self, model_output):
         if self._hp.nll_prior_train:
-            loss = NLL(breakdown=0)(model_output.q_hat, model_output.z_q.detach())
+            loss = NLL(breakdown=0)(model_output.q_hat, model_output.z_q.detach())  # use this
         else:
             loss = KLDivLoss(breakdown=0)(model_output.q.detach(), model_output.q_hat)
         # aggregate loss breakdown for each of the priors in the ensemble

@@ -27,7 +27,7 @@ To regenerate the maze dataset, [our fork of the D4RL repo](https://github.com/k
 It includes the script used to generate the maze dataset. Specifically, new data can be created by running:
 ```
 cd d4rl
-python3 scripts/generate_randMaze2d_datasets.py --render --agent_centric --save_images --data_dir=path_to_your_dir
+python3 scripts/generate_randMaze2d_datasets.py --render --agent_centric --save_images --data_dir=/home/lsy/Desktop/test
 ```
 Optionally, an argument `--batch_idx` allows to automatically generate a subfolder in `data_dir` with the batch index, 
 so that multiple data generation scripts with different batch indices can be run in parallel

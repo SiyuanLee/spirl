@@ -34,6 +34,7 @@ class ClModelPolicy(Policy):
     def _build_network(self):
         net = self._hp.policy_model(self._hp.policy_model_params, None)
         if self._hp.load_weights:
+            print("Load low-level policy weights in cl_model_policies !!!")
             BaseAgent.load_model_weights(net, self._hp.policy_model_checkpoint, self._hp.policy_model_epoch)
         self._log_sigma = torch.tensor(self._hp.initial_log_sigma * np.ones(self.action_dim, dtype=np.float32),
                                        device=self.device, requires_grad=True)

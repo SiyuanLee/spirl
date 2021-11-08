@@ -7,7 +7,7 @@ from spirl.rl.components.critic import SplitObsMLPCritic
 from spirl.rl.components.sampler import ACMultiImageAugmentedHierarchicalSampler
 from spirl.rl.components.replay_buffer import UniformReplayBuffer
 from spirl.rl.policies.prior_policies import ACLearnedPriorAugmentedPIPolicy
-from spirl.rl.envs.maze import ACRandMaze0S40Env
+from spirl.rl.envs.maze import ACRandMaze0S40Env, LargeMazeEnv
 from spirl.rl.agents.ac_agent import SACAgent
 from spirl.rl.policies.cl_model_policies import ACClModelPolicy
 from spirl.data.maze.src.maze_agents import MazeACActionPriorSACAgent
@@ -22,13 +22,14 @@ notes = 'hierarchical RL on the maze env'
 configuration = {
     'seed': 42,
     'agent': FixedIntervalHierarchicalAgent,
-    'environment': ACRandMaze0S40Env,
+    'environment': LargeMazeEnv,
     'sampler': ACMultiImageAugmentedHierarchicalSampler,
     'data_dir': '.',
     'num_epochs': 100,
     'max_rollout_len': 2000,
     'n_steps_per_epoch': 1e5,
     'n_warmup_steps': 5e3,
+    'only_eval': 1,
 }
 configuration = AttrDict(configuration)
 
@@ -71,7 +72,7 @@ ll_model_params = AttrDict(
 ll_policy_params = AttrDict(
     policy_model=ImageClSPiRLMdl,
     policy_model_params=ll_model_params,
-    policy_model_checkpoint=os.path.join(os.environ["EXP_DIR"], "skill_prior_learning/maze/hierarchical_cl"),
+    policy_model_checkpoint=os.path.join(os.environ["EXP_DIR"], "skill_prior_learning/maze/hierarchical_cl/test_large"),
     initial_log_sigma=-50.,
 )
 ll_policy_params.update(ll_model_params)

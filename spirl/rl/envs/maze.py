@@ -38,3 +38,13 @@ class ACRandMaze0S40Env(MazeEnv):
             'name': "maze2d-randMaze0S40-ac-v0",
         })
         return super()._default_hparams().overwrite(default_dict)
+
+class LargeMazeEnv(MazeEnv):
+    TARGET_POS = None
+    START_POS = None
+
+    def _default_hparams(self):
+        default_dict = ParamDict({
+            'name': "maze2d-large-img-v0",
+        })
+        return super()._default_hparams().overwrite(default_dict)

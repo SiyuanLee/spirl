@@ -1,6 +1,8 @@
 import numpy as np
 import contextlib
 from collections import deque
+import matplotlib.pyplot as plt
+import cv2
 
 from spirl.utils.general_utils import listdict2dictlist, AttrDict, ParamDict, obj2np
 from spirl.modules.variational_inference import MultivariateGaussian
@@ -144,6 +146,7 @@ class HierarchicalSampler(Sampler):
         hl_experience_batch, ll_experience_batch = [], []
 
         env_steps, hl_step = 0, 0
+        collision = 0
         with self._env.val_mode() if not is_train else contextlib.suppress():
             with self._agent.val_mode() if not is_train else contextlib.suppress():
                 with self._agent.rollout_mode():
@@ -152,6 +155,8 @@ class HierarchicalSampler(Sampler):
                         agent_output = self.sample_action(self._obs)
                         agent_output = self._postprocess_agent_output(agent_output)
                         obs, reward, done, info = self._env.step(agent_output.action)
+                        collision += info['collision']
+                        # print("collision", info["collision"])
                         obs = self._postprocess_obs(obs)
 
                         # update last step's 'observation_next' with HL action
@@ -201,11 +206,11 @@ class HierarchicalSampler(Sampler):
                                     hl_experience_batch[-1].done = True
                             self._episode_reset(global_step)
 
-
+        print("total collision in {} steps: {} !!!".format(batch_size, collision))
         return AttrDict(
             hl_batch=listdict2dictlist(hl_experience_batch),
             ll_batch=listdict2dictlist(ll_experience_batch[:-1]),   # last element does not have updated obs_next!
-        ), env_steps
+        ), env_steps, collision
 
     def _episode_reset(self, global_step=None):
         super()._episode_reset(global_step)
@@ -228,6 +233,9 @@ class MultiImageAugmentedSampler(Sampler):
 
     def _postprocess_obs(self, obs):
         img = self._env.render().transpose(2, 0, 1) * 2. - 1.0
+        # print("img", img)
+        cv2.imwrite("./data/imgs/", (img.transpose(1, 2, 0) + 1.0) / 2.)
+
         if not self._past_frames:   # initialize past frames with N copies of current frame
             [self._past_frames.append(img) for _ in range(self._hp.n_frames - 1)]
         self._past_frames.append(img)
