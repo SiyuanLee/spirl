@@ -16,7 +16,7 @@ from spirl.rl.components.sampler import Sampler
 from spirl.rl.components.replay_buffer import RolloutStorage
 import sys
 
-WANDB_PROJECT_NAME = 'test_down'
+WANDB_PROJECT_NAME = 'collision'
 WANDB_ENTITY_NAME = 'siyuanli'
 
 
@@ -126,20 +126,21 @@ class RLTrainer:
 
         # initialize timing
         timers = defaultdict(lambda: AverageTimer())
+        steps = 0
+        collision_total = 0
 
         self.sampler.init(is_train=True)
         ep_start_step = self.global_step
-        total_steps = 0
-        total_collision  = 0
         while self.global_step - ep_start_step < self._hp.n_steps_per_epoch:
             with timers['batch'].time():
                 # collect experience
                 with timers['rollout'].time():
-                    experience_batch, env_steps, collisions = self.sampler.sample_batch(batch_size=self._hp.n_steps_per_update, global_step=self.global_step)
+                    experience_batch, env_steps, collision = self.sampler.sample_batch(batch_size=self._hp.n_steps_per_update, global_step=self.global_step)
+                    steps += env_steps
+                    collision_total += collision
                     self.global_step += mpi_sum(env_steps)
-                    total_steps += env_steps
-                    total_collision += collisions
-                    print("Collisions in {} Steps: {}, Rate: {}".format(total_steps, total_collision, total_collision / total_steps))
+                    print("total collision in {} steps: {}, Rate: {} !!!".format(steps, collision_total,
+                                                                                 collision_total / steps))
 
                 # update policy
                 with timers['update'].time():
@@ -152,6 +153,8 @@ class RLTrainer:
                         self.agent.log_outputs(agent_outputs, None, self.logger,
                                                log_images=False, step=self.global_step)
                         self.print_train_update(epoch, agent_outputs, timers)
+        # log collision
+        print("total collision in {} steps: {}, Rate: {} !!!".format(steps, collision_total, collision_total / steps))
 
     def val(self):
         """Evaluate agent."""

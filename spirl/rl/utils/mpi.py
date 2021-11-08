@@ -14,7 +14,9 @@ def update_with_mpi_config(conf):
     rank = MPI.COMM_WORLD.Get_rank()
     mpi_config.rank = rank
     mpi_config.is_chef = rank == 0
-    mpi_config.num_workers = MPI.COMM_WORLD.Get_size()
+    # mpi_config.num_workers = MPI.COMM_WORLD.Get_size()
+    mpi_config.num_workers = 1
+    # print("num workers", mpi_config.num_workers)
     conf.mpi = mpi_config
 
     # update conf

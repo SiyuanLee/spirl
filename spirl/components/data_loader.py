@@ -128,6 +128,8 @@ class VideoDataset(Dataset):
     def _get_raw_data(self, index):
         data = AttrDict()
         file_index = index // self.samples_per_file
+        # print("index", file_index)
+        # print("filenames", len(self.filenames))
         path = self.filenames[file_index]
 
         try:

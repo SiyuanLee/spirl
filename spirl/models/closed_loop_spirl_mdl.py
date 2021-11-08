@@ -14,6 +14,8 @@ class ClSPiRLMdl(SkillPriorMdl):
         assert not self._hp.use_convs  # currently only supports non-image inputs
         assert self._hp.cond_decode    # need to decode based on state for closed-loop low-level
         self.q = self._build_inference_net()
+        print("state_dim", self.state_dim)
+        print("z_dim", self._hp.nz_vae)
         self.decoder = Predictor(self._hp,
                                  input_size=self.enc_size + self._hp.nz_vae,
                                  output_size=self._hp.action_dim,
@@ -25,6 +27,8 @@ class ClSPiRLMdl(SkillPriorMdl):
         assert inputs is not None       # need additional state sequence input for full decode
         seq_enc = self._get_seq_enc(inputs)
         decode_inputs = torch.cat((seq_enc[:, :steps], z[:, None].repeat(1, steps, 1)), dim=-1)
+        # print("z", z.shape)
+        # print("decode_input", decode_inputs.shape)
         return batch_apply(decode_inputs, self.decoder)
 
     def _build_inference_net(self):

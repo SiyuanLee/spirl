@@ -268,13 +268,13 @@ class SkillPriorMdl(BaseModel, ProbabilisticModel):
         """Splits batch into separate batches for prior ensemble, optionally runs first or avg prior on whole batch.
            (first_only, avg == True is only used for RL)."""
         if first_only:
-            return self._compute_learned_prior(self.p[0], inputs)
+            return self._compute_learned_prior(self.p[0], inputs)  # only use the firt network in the ensemble set
 
         assert inputs.shape[0] % self._hp.n_prior_nets == 0
         per_prior_inputs = torch.chunk(inputs, self._hp.n_prior_nets)
         prior_results = [self._compute_learned_prior(prior, input_batch)
                          for prior, input_batch in zip(self.p, per_prior_inputs)]
-
+        # print("prior_results", prior_results)
         return type(prior_results[0]).cat(*prior_results, dim=0)
 
     def _compute_learned_prior(self, prior_mdl, inputs):

@@ -27,7 +27,9 @@ class ACAgent(BaseAgent):
 
     def _act(self, obs):
         # TODO implement non-sampling validation mode
+        # print("obs before", obs)
         obs = map2torch(self._obs_normalizer(obs), self._hp.device)
+        # print("obs after", obs)
         if len(obs.shape) == 1:     # we need batched inputs for policy
             policy_output = self._remove_batch(self.policy(obs[None]))
             if 'dist' in policy_output:

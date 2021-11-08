@@ -23,6 +23,9 @@ class Policy(nn.Module):
 
     def forward(self, obs):
         output_dist = self._compute_action_dist(obs)
+        # print("shape", output_dist.mu[0].shape[0])
+        if output_dist.mu[0].shape[0] == 10:
+            print("mu, sigma", output_dist.mu, output_dist.sigma)
         action = output_dist.rsample()
         log_prob = output_dist.log_prob(action)
         if self._hp.squash_output_dist:

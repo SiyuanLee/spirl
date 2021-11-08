@@ -206,7 +206,7 @@ class HierarchicalSampler(Sampler):
                                     hl_experience_batch[-1].done = True
                             self._episode_reset(global_step)
 
-        print("total collision in {} steps: {} !!!".format(batch_size, collision))
+        # print("total collision in {} steps: {} !!!".format(batch_size, collision))
         return AttrDict(
             hl_batch=listdict2dictlist(hl_experience_batch),
             ll_batch=listdict2dictlist(ll_experience_batch[:-1]),   # last element does not have updated obs_next!
@@ -234,7 +234,8 @@ class MultiImageAugmentedSampler(Sampler):
     def _postprocess_obs(self, obs):
         img = self._env.render().transpose(2, 0, 1) * 2. - 1.0
         # print("img", img)
-        cv2.imwrite("./data/imgs/", (img.transpose(1, 2, 0) + 1.0) / 2.)
+        # plt.imshow((img.transpose(1, 2, 0) + 1.0) / 2.)
+        # plt.savefig("obs.png")
 
         if not self._past_frames:   # initialize past frames with N copies of current frame
             [self._past_frames.append(img) for _ in range(self._hp.n_frames - 1)]

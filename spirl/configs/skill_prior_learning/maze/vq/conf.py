@@ -1,7 +1,7 @@
 import os
 
 from spirl.models.skill_prior_mdl import SkillSpaceLogger
-from spirl.models.closed_loop_spirl_mdl import ImageClSPiRLMdl
+from spirl.models.closed_vq_mdl import ImgClsVQMdl
 from spirl.utils.general_utils import AttrDict
 from spirl.configs.default_data_configs.maze import data_spec
 from spirl.components.evaluator import TopOfNSequenceEvaluator
@@ -11,7 +11,7 @@ current_dir = os.path.dirname(os.path.realpath(__file__))
 
 
 configuration = {
-    'model': ImageClSPiRLMdl,
+    'model': ImgClsVQMdl,
     'logger': SkillSpaceLogger,
     # 'data_dir': os.path.join(os.environ['DATA_DIR'], 'maze'),
     'data_dir':'/home/lsy/Desktop/data/fix_start2e6/maze2d/',

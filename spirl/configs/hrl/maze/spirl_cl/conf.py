@@ -28,8 +28,8 @@ configuration = {
     'num_epochs': 100,
     'max_rollout_len': 2000,
     'n_steps_per_epoch': 1e5,
-    'n_warmup_steps': 5e3,
-    'only_eval': 1,
+    'n_warmup_steps': 0,
+    'only_eval': 0,
 }
 configuration = AttrDict(configuration)
 
@@ -137,7 +137,7 @@ agent_config = AttrDict(
     ll_agent_params=ll_agent_config,
     hl_interval=ll_model_params.n_rollout_steps,
     log_videos=False,
-    update_hl=True,
+    update_hl=False,
     update_ll=False,
 )
 

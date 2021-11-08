@@ -31,15 +31,16 @@ CUDA_VISIBLE_DEVICES=1 python spirl/train.py --path=spirl/configs/skill_prior_le
 --dont_save 1
 
 # maze2d env
-CUDA_VISIBLE_DEVICES=1 python spirl/train.py --path=spirl/configs/skill_prior_learning/maze/hierarchical_cl --val_data_size=160 \
---prefix=test_large
+CUDA_VISIBLE_DEVICES=3 python spirl/train.py --path=spirl/configs/skill_prior_learning/maze/hierarchical_cl --val_data_size=160 \
+--prefix=test
+
+CUDA_VISIBLE_DEVICES=4 python spirl/train.py --path=spirl/configs/skill_prior_learning/maze/vq --val_data_size=160 \
+--prefix=vq_dim16
 ```
 
 To train a downstream task policy with RL using the closed-loop SPiRL model we just trained, run the following command:
 ```
 python3 spirl/rl/train.py --path=spirl/configs/hrl/kitchen/spirl_cl --seed=0 --prefix=SPIRLv2_kitchen_seed0
 
-# maze downstream
-CUDA_VISIBLE_DEVICES=2 python3 spirl/rl/train.py --path=spirl/configs/hrl/maze/spirl_cl --seed=0 --prefix=test_maze_down
-
+CUDA_VISIBLE_DEVICES=2 python3 spirl/rl/train.py --path=spirl/configs/hrl/maze/spirl_cl --seed=0 --prefix=test
 ```

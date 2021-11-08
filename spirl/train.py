@@ -1,4 +1,5 @@
-import matplotlib; matplotlib.use('Agg')
+import matplotlib
+# matplotlib.use('Agg')
 import torch
 import os
 import time
@@ -144,7 +145,7 @@ class ModelTrainer(BaseTrainer):
             upto_log_time.update(time.time() - end)
             if self.log_outputs_now and not self.args.dont_save:
                 self.model.log_outputs(output, inputs, losses, self.global_step,
-                                       log_images=self.log_images_now, phase='train', **self._logging_kwargs)
+                                       log_images=False, phase='train', **self._logging_kwargs)
             batch_time.update(time.time() - end)
             end = time.time()
             
@@ -194,7 +195,7 @@ class ModelTrainer(BaseTrainer):
                         self.evaluator.dump_results(self.global_step)
 
                     self.model_test.log_outputs(output, inputs, losses_meter.avg, self.global_step,
-                                                log_images=True, phase='val', **self._logging_kwargs)
+                                                log_images=False, phase='val', **self._logging_kwargs)
                     print(('\nTest set: Average loss: {:.4f} in {:.2f}s\n'
                            .format(losses_meter.avg.total.value.item(), time.time() - start)))
             del output

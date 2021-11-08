@@ -40,14 +40,14 @@ def npify(data):
 
 
 def sample_env_and_controller(args):
-    layout_str = maze_layouts.rand_layout(seed=1, size=args.rand_maze_size)
-    controller = waypoint_controller.WaypointController(layout_str)
-    env = maze_model.MazeEnv(layout_str, agent_centric_view=args.agent_centric)
+    # layout_str = maze_layouts.rand_layout(seed=1, size=args.rand_maze_size)
+    # controller = waypoint_controller.WaypointController(layout_str)
+    # env = maze_model.MazeEnv(layout_str, agent_centric_view=args.agent_centric)
 
-    # # use the maze in d4rl
-    # maze = maze_layouts.LARGE_MAZE
-    # controller = waypoint_controller.WaypointController(maze)
-    # env = maze_model.MazeEnv(maze, agent_centric_view=args.agent_centric)
+    # use the maze in d4rl
+    maze = maze_layouts.LARGE_MAZE
+    controller = waypoint_controller.WaypointController(maze)
+    env = maze_model.MazeEnv(maze, agent_centric_view=args.agent_centric, fix_start=True)
 
     return env, controller
 

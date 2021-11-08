@@ -7,10 +7,11 @@ import numpy as np
 from collections import deque
 from matplotlib import pyplot as plt
 from matplotlib.patches import Ellipse
+import torch.nn.functional as F
 
 from spirl.components.base_model import BaseModel
 from spirl.components.logger import Logger
-from spirl.modules.losses import KLDivLoss, NLL
+from spirl.modules.losses import KLDivLoss, NLL, CELoss
 from spirl.modules.subnetworks import BaseProcessingLSTM, Predictor, Encoder
 from spirl.modules.recurrent_modules import RecurrentPredictor
 from spirl.utils.general_utils import batch_apply, AttrDict, ParamDict, split_along_axis, get_clipped_optimizer
@@ -36,6 +37,7 @@ class ClsVQMdl(BaseModel, ProbabilisticModel):
         self.device = self._hp.device
 
         self.build_network()
+        self.warmup_epoch = 10   # warm up without the VQ layer for 10 epochs
 
     # not use now
     @contextmanager
@@ -92,11 +94,24 @@ class ClsVQMdl(BaseModel, ProbabilisticModel):
         assert not self._hp.use_convs   # currently only supports non-image inputs
         assert self._hp.cond_decode  # need to decode based on state for closed-loop low-level
         self.q = self._build_inference_net()
+        print("state_dim", self.state_dim)
+        print("z_dim", self._hp.nz_vae)
         self.decoder = Predictor(self._hp,
-                                 input_size=self.state_dim + self._hp.nz_vae,
+                                 input_size=self.enc_size + self._hp.nz_vae,
                                  output_size=self._hp.action_dim,
                                  mid_size=self._hp.nz_mid_prior)
-        self.vq_layer = Quantize(self._hp.nz_vae, 16)
+        self.codebook_size = 16
+        self.vq_layer = Quantize(self._hp.nz_vae, self.codebook_size)
+        self.p = self._build_prior_ensemble()
+
+    def _build_prior_ensemble(self):
+        assert self._hp.n_prior_nets == 1
+        return nn.ModuleList([self._build_prior_net() for _ in range(self._hp.n_prior_nets)])
+
+    def _build_prior_net(self):
+        """Supports building Gaussian, GMM and Flow prior networks. Default is Gaussian skill prior."""
+        return Predictor(self._hp, input_size=self.prior_input_size, output_size=self.codebook_size,
+                         num_layers=self._hp.num_prior_net_layers, mid_size=self._hp.nz_mid_prior)
 
     def forward(self, inputs, use_learned_prior=False):
         """Forward pass of the SPIRL model.
@@ -107,7 +122,20 @@ class ClsVQMdl(BaseModel, ProbabilisticModel):
         inputs.observations = inputs.actions    # for seamless evaluation
 
         # run inference
-        output.z, output.vq_loss = self._run_inference(inputs)
+        output.z, output.vq_loss, output.vq_index = self._run_inference(inputs)
+        # print("vq_index", output.vq_index)
+
+        # infer learned skill prior
+        output.q_hat = self.compute_learned_prior(self._learned_prior_input(inputs))
+        softmax_q_hat = F.softmax(output.q_hat, dim=1)
+
+        # sample latnet variable
+        if self._sample_prior:
+            z_index = softmax_q_hat.multinomial(num_samples=1, replacement=True)
+            z_index = z_index.reshape(-1)
+            # print("z_index", z_index)
+            output.z = self.vq_layer.embed_code(z_index)
+            # print("prior z", output.z.shape)
 
         # decode
         assert self._regression_targets(inputs).shape[1] == self._hp.n_rollout_steps
@@ -132,12 +160,18 @@ class ClsVQMdl(BaseModel, ProbabilisticModel):
         # vq loss
         losses.vq_loss1 = model_output.vq_loss[0]
         losses.vq_loss2 = model_output.vq_loss[1]
-        # print("vq loss1", losses.vq_loss1)
-        # print("vq loss2", losses.vq_loss2)
-        # print("rec loss", losses.rec_mse)
+
+        # learned skill prior loss
+        losses.q_hat_loss = self._compute_learned_prior_loss(model_output)
 
         losses.total = self._compute_total_loss(losses)
         return losses
+
+    def _compute_learned_prior_loss(self, model_output):
+        loss = CELoss(breakdown=0)(model_output.q_hat, model_output.vq_index.detach())
+        # aggregate loss breakdown for each of the priors in the ensemble
+        # loss.breakdown = torch.stack([chunk.mean() for chunk in torch.chunk(loss.breakdown, self._hp.n_prior_nets)])
+        return loss
 
     def _log_outputs(self, model_output, inputs, losses, step, log_images, phase, logger, **logging_kwargs):
         """Optionally visualizes outputs of SPIRL model.
@@ -160,28 +194,8 @@ class ClsVQMdl(BaseModel, ProbabilisticModel):
         assert inputs is not None       # need additional state sequence input for full decode
         seq_enc = self._get_seq_enc(inputs)
         decode_inputs = torch.cat((seq_enc[:, :steps], z[:, None].repeat(1, steps, 1)), dim=-1)
+        # print("decode_input", decode_inputs.shape)
         return batch_apply(decode_inputs, self.decoder)
-
-    # not change yet
-    def run(self, inputs, use_learned_prior=True):
-        """Policy interface for model. Runs decoder if action plan is empty, otherwise returns next action from action plan.
-        :arg inputs: dict with 'states', 'actions', 'images' keys from environment
-        :arg use_learned_prior: if True, uses learned prior otherwise samples latent from uniform prior
-        """
-        if not self._action_plan:
-            inputs = map2torch(inputs, device=self.device)
-
-            # sample latent variable from prior
-            z = self.compute_learned_prior(self._learned_prior_input(inputs), first_only=True).sample() \
-                if use_learned_prior else Gaussian(torch.zeros((1, self._hp.nz_vae*2), device=self.device)).sample()
-
-            # decode into action plan
-            z = z.repeat(self._hp.batch_size, 1)  # this is a HACK flat LSTM decoder can only take batch_size inputs
-            input_obs = self._learned_prior_input(inputs).repeat(self._hp.batch_size, 1)
-            actions = self.decode(z, cond_inputs=input_obs, steps=self._hp.n_rollout_steps)[0]
-            self._action_plan = deque(split_along_axis(map2np(actions), axis=0))
-
-        return AttrDict(action=self._action_plan.popleft()[None])
 
     def reset(self):
         """Resets action plan (should be called at beginning of episode when used in RL loop)."""
@@ -199,29 +213,21 @@ class ClsVQMdl(BaseModel, ProbabilisticModel):
         # run inference with state sequence conditioning
         inf_input = torch.cat((inputs.actions, self._get_seq_enc(inputs)), dim=-1)
         z = self.q(inf_input)[:, -1]
-        z, loss_vq, _ = self.vq_layer(z)
-        return z, loss_vq
+        z, loss_vq, vq_index = self.vq_layer(z)
+        return z, loss_vq, vq_index
 
     def compute_learned_prior(self, inputs, first_only=False):
         """Splits batch into separate batches for prior ensemble, optionally runs first or avg prior on whole batch.
            (first_only, avg == True is only used for RL)."""
-        if first_only:
-            return self._compute_learned_prior(self.p[0], inputs)
+        # if first_only:
+        return self.p[0](inputs)
 
-        assert inputs.shape[0] % self._hp.n_prior_nets == 0
-        per_prior_inputs = torch.chunk(inputs, self._hp.n_prior_nets)
-        prior_results = [self._compute_learned_prior(prior, input_batch)
-                         for prior, input_batch in zip(self.p, per_prior_inputs)]
-
-        return type(prior_results[0]).cat(*prior_results, dim=0)
-
-    def _compute_learned_prior(self, prior_mdl, inputs):
-        if self._hp.learned_prior_type == 'gmm':
-            return GMM(*prior_mdl(inputs))
-        elif self._hp.learned_prior_type == 'flow':
-            return prior_mdl(inputs)
-        else:
-            return MultivariateGaussian(prior_mdl(inputs))
+        # assert inputs.shape[0] % self._hp.n_prior_nets == 0
+        # per_prior_inputs = torch.chunk(inputs, self._hp.n_prior_nets)
+        # prior_results = [prior(input_batch)
+        #                  for prior, input_batch in zip(self.p, per_prior_inputs)]
+        #
+        # return type(prior_results[0]).cat(*prior_results, dim=0)
 
     def _learned_prior_input(self, inputs):
         return inputs.states[:, 0]
@@ -259,3 +265,82 @@ class ClsVQMdl(BaseModel, ProbabilisticModel):
     @property
     def beta(self):
         return self._log_beta().exp()[0].detach() if self._hp.target_kl is not None else self._hp.kl_div_weight
+
+
+class ImgClsVQMdl(ClsVQMdl):
+    """SPiRL model with closed-loop decoder that operates on image observations."""
+
+    def _default_hparams(self):
+        default_dict = ParamDict({
+            'prior_input_res': 32,  # input resolution of prior images
+            'encoder_ngf': 8,  # number of feature maps in shallowest level of encoder
+            'n_input_frames': 1,  # number of prior input frames
+        })
+        # add new params to parent params
+        return super()._default_hparams().overwrite(default_dict)
+
+    def _updated_encoder_params(self):
+        params = copy.deepcopy(self._hp)
+        return params.overwrite(AttrDict(
+            use_convs=True,
+            use_skips=False,                  # no skip connections needed flat we are not reconstructing
+            img_sz=self._hp.prior_input_res,  # image resolution
+            input_nc=3*self._hp.n_input_frames,  # number of input feature maps
+            ngf=self._hp.encoder_ngf,         # number of feature maps in shallowest level
+            nz_enc=self.prior_input_size,     # size of image encoder output feature
+            builder=LayerBuilderParams(use_convs=True, normalization=self._hp.normalization)
+        ))
+
+    def _build_prior_net(self):
+        return nn.Sequential(
+            ResizeSpatial(self._hp.prior_input_res),
+            Encoder(self._updated_encoder_params()),
+            RemoveSpatial(),
+            super()._build_prior_net(),
+        )
+
+    def _build_inference_net(self):
+        self.img_encoder = nn.Sequential(ResizeSpatial(self._hp.prior_input_res),  # encodes image inputs
+                                         Encoder(self._updated_encoder_params()),
+                                         RemoveSpatial(),)
+        return ClsVQMdl._build_inference_net(self)
+
+    def _get_seq_enc(self, inputs):
+        # stack input image sequence
+        stacked_imgs = torch.cat([inputs.images[:, t:t+inputs.actions.shape[1]]
+                                  for t in range(self._hp.n_input_frames)], dim=2)
+        # encode stacked seq
+        return batch_apply(stacked_imgs, self.img_encoder)
+
+    def _learned_prior_input(self, inputs):
+        return inputs.images[:, :self._hp.n_input_frames]\
+            .reshape(inputs.images.shape[0], -1, self.resolution, self.resolution)
+
+    def _regression_targets(self, inputs):
+        return inputs.actions[:, (self._hp.n_input_frames-1):]
+
+    def unflatten_obs(self, raw_obs):
+        """Utility to unflatten [obs, prior_obs] concatenated observation (for RL usage)."""
+        assert len(raw_obs.shape) == 2 and raw_obs.shape[1] == self.state_dim \
+               + self._hp.prior_input_res**2 * 3 * self._hp.n_input_frames
+        return AttrDict(
+            obs=raw_obs[:, :self.state_dim],
+            prior_obs=raw_obs[:, self.state_dim:].reshape(raw_obs.shape[0], 3*self._hp.n_input_frames,
+                                                          self._hp.prior_input_res, self._hp.prior_input_res)
+        )
+
+    def enc_obs(self, obs):
+        """Optionally encode observation for decoder."""
+        return self.img_encoder(obs)
+
+    @property
+    def enc_size(self):
+        return self._hp.nz_enc
+
+    @property
+    def prior_input_size(self):
+        return self.enc_size
+
+    @property
+    def resolution(self):
+        return self._hp.prior_input_res
